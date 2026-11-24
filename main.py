@@ -31,34 +31,62 @@ PITCH = (
 MAX_CHARS = 200
 
 
+def entry_stats(text):
+    """Measure the entry once, so every gate below reads the same
+    numbers instead of re-counting them ad hoc.
+
+    Returns a dict with the character count, the number of terminal
+    full stops, whether the text ends with one, and whether it holds
+    any line break.
+    """
+    return {
+        "chars": len(text),
+        "stops": text.count("."),
+        "ends_with_stop": text.endswith("."),
+        "has_line_break": any(ch in text for ch in "\n\r"),
+        "blank": not text.strip(),
+    }
+
+
 def validate(text):
     """Enforce the bounty gate: 1-200 characters, not only whitespace,
     exactly one sentence."""
-    if not text or not text.strip():
+    stats = entry_stats(text)
+    if not text or stats["blank"]:
         raise ValueError("entry is empty or only whitespace")
-    if len(text) > MAX_CHARS:
+    if stats["chars"] > MAX_CHARS:
         raise ValueError(
-            "entry is %d characters, over the %d limit" % (len(text), MAX_CHARS)
+            "entry is %d characters, over the %d limit"
+            % (stats["chars"], MAX_CHARS)
         )
     # One sentence: a single terminal full stop, nothing else that
     # ends a sentence, no line breaks.
-    if text.count(".") != 1 or not text.endswith("."):
-        raise ValueError("entry must be exactly one sentence")
-    if any(ch in text for ch in "\n\r"):
+    if stats["stops"] != 1 or not stats["ends_with_stop"]:
+        raise ValueError(
+            "entry must be exactly one sentence "
+            "(found %d full stop(s))" % stats["stops"]
+        )
+    if stats["has_line_break"]:
         raise ValueError("entry must not contain line breaks")
     return text
 
 
 def main():
     entry = validate(PITCH)
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+    # An explicitly empty MAKEFUN_OUTPUT_DIR means "use the default",
+    # not "write into the current directory".
+    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR") or "/output"
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, "entry.txt")
     # No trailing newline: the gate counts every character, so the file
     # holds exactly the sentence, nothing more.
     with open(out_path, "w", encoding="utf-8", newline="") as f:
         f.write(entry)
-    print("wrote %s (%d characters)" % (out_path, len(entry)))
+    stats = entry_stats(entry)
+    print(
+        "wrote %s (%d characters, %d sentence)"
+        % (out_path, stats["chars"], stats["stops"])
+    )
     print(entry)
     return 0
 
